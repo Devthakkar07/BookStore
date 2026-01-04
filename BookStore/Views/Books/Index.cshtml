@@ -1,0 +1,261 @@
+﻿@{
+    ViewData["Title"] = "Book Management";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="flex-grow-1 text-center">
+        <h2 class="m-0">Book Management</h2>
+    </div>
+    <div>
+        <button class="btn btn-success" onclick="openCreateModal()">+ Add New Book</button>
+    </div>
+</div>
+
+
+
+<!-- Book Table -->
+<table class="table table-bordered table-striped" id="booksTable">
+    <thead class="table-dark">
+        <tr>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Price</th>
+            <th>Published Date</th>
+            <th style="width: 150px;">Actions</th>
+        </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+
+<!-- Modal for Create / Edit -->
+<div class="modal" id="bookModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Add Book</h5>
+                <button type="button" class="btn-close" onclick="closeModal()"></button>
+            </div>
+            <div class="modal-body">
+                <form id="bookForm">
+                    <input type="hidden" id="bookId">
+                    <div class="mb-3">
+                        <label>Title</label>
+                        <input type="text" id="title" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>Author</label>
+                        <input type="text" id="author" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label>Price</label>
+                        <input type="number" id="price" class="form-control" required step="0.01">
+                    </div>
+                    <div class="mb-3">
+                        <label>Published Date</label>
+                        <input type="date" id="publishedDate" class="form-control" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="saveBook()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const apiUrl = '/api/books';
+
+    // ============================
+    // Load all books
+    // ============================
+    async function loadBooks() {
+        const tbody = document.querySelector('#booksTable tbody');
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center">Loading books...</td></tr>`;
+
+        try {
+            const res = await fetch(apiUrl);
+            const data = await res.json();
+
+            tbody.innerHTML = '';
+
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="text-center">No books found</td></tr>`;
+                return;
+            }
+
+            data.forEach(b => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${b.title}</td>
+                    <td>${b.author}</td>
+                    <td>₹ ${b.price}</td>
+                    <td>${new Date(b.publishedDate).toLocaleDateString()}</td>
+                    <td>
+                        <button class="btn btn-warning btn-sm me-1" onclick="editBook(${b.id})">Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteBook(${b.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = `<tr><td colspan="5" class="text-danger text-center">Failed to load data</td></tr>`;
+        }
+    }
+    // ============================
+    // Open Create Modal
+    // ============================
+    function openCreateModal() {
+        document.getElementById('modalTitle').innerText = 'Add Book';
+        document.getElementById('bookId').value = '';
+        document.getElementById('bookForm').reset();
+        document.getElementById('bookModal').style.display = 'block';
+    }
+
+    // ============================
+    // Close Modal
+    // ============================
+    function closeModal() {
+        document.getElementById('bookModal').style.display = 'none';
+    }
+
+    // ============================
+    // Save Book (Create or Update)
+    // ============================
+    async function saveBook() {
+        const id = document.getElementById('bookId').value;
+        const book = {
+            id: id ? parseInt(id) : 0,
+            title: document.getElementById('title').value.trim(),
+            author: document.getElementById('author').value.trim(),
+            price: parseFloat(document.getElementById('price').value),
+            publishedDate: document.getElementById('publishedDate').value
+        };
+
+        if (!book.title || !book.author || !book.price || !book.publishedDate) {
+            alert('Please fill all fields.');
+            return;
+        }
+
+        let method = id ? 'PUT' : 'POST';
+
+        try {
+            const res = await fetch(apiUrl, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(book)
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                alert(data.message); // Friendly duplicate or error message
+                return;
+            }
+
+            closeModal();
+            loadBooks();
+        } catch (err) {
+            console.error(err);
+            alert('An unexpected error occurred.');
+        }
+    }
+
+    // ============================
+    // Edit Book
+    // ============================
+    async function editBook(id) {
+        try {
+            const res = await fetch(`${apiUrl}/${id}`);
+            if (!res.ok) {
+                alert('Book not found.');
+                return;
+            }
+
+            const b = await res.json();
+
+            document.getElementById('modalTitle').innerText = 'Edit Book';
+            document.getElementById('bookId').value = b.id;
+            document.getElementById('title').value = b.title || '';
+            document.getElementById('author').value = b.author || '';
+            document.getElementById('price').value = b.price || 0;
+
+            if (b.publishedDate) {
+                const date = new Date(b.publishedDate);
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                const day = date.getDate().toString().padStart(2, '0');
+                const formatted = `${date.getFullYear()}-${month}-${day}`;
+                document.getElementById('publishedDate').value = formatted;
+            } else {
+                document.getElementById('publishedDate').value = '';
+            }
+
+            document.getElementById('bookModal').style.display = 'block';
+        } catch (err) {
+            console.error(err);
+            alert('Failed to fetch book data.');
+        }
+    }
+
+    // ============================
+    // Delete Book
+    // ============================
+    async function deleteBook(id) {
+        if (!confirm('Are you sure you want to delete this book?')) return;
+
+        try {
+            const res = await fetch(`${apiUrl}/${id}`, { method: 'DELETE' });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.message || 'Delete failed.');
+                return;
+            }
+
+            loadBooks();
+        } catch (err) {
+            console.error(err);
+            alert('Failed to delete book.');
+        }
+    }
+
+    // ============================
+    // Initialize
+    // ============================
+    loadBooks();
+</script>
+
+<style>
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+    }
+
+    .modal-dialog {
+        max-width: 500px;
+        margin: 10% auto;
+    }
+
+    table tbody tr:hover {
+        background-color: #f8f9fa;
+        transition: background-color 0.2s ease-in-out;
+    }
+
+    button {
+        transition: transform 0.15s ease-in-out;
+    }
+
+        button:hover {
+            transform: scale(1.05);
+        }
+
+    .modal-content {
+        border-radius: 10px;
+    }
+</style>
